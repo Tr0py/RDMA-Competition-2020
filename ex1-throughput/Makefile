@@ -4,9 +4,6 @@ CFLAGS=-O4 -g
 COMMON=common.h client.h server.h
 all:clean client server
 
-hello.elf:hello.c
-	$(CC) $< $(COMMON) $(CFLAGS) -o $@
-
 client: client.cpp
 	$(CC) $(CFLAGS) $< $(COMMON) -o $@
 
