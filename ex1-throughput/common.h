@@ -13,7 +13,7 @@
 #include <sys/time.h>
 
 #define MAXLINE 4096
-#define BUFFERSIZE 0x80000
+#define BUFFERSIZE 0x800000
 
 int InitializeBuffer(char** pbuffer)
 {

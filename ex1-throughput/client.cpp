@@ -1,5 +1,6 @@
 #include "client.h"
 
+double GetThroughput(int fd, int size, char* buffer);
 int main(int argc, char **argv)
 {
     char recvline[4096], sendline[4096];
@@ -59,29 +60,43 @@ int main(int argc, char **argv)
     for (int i=0; i <= 10; i++) {
         int size = 1 << i;
         printf("%d\t", size);
-        memset(buff, 0, sizeof(buff));
-        gettimeofday(&t, NULL);
-        sizeSend(sockfd, buffer, BUFFERSIZE, 0, size);
 
 
-        //printf("Sent.\n");
+        throughput = GetThroughput(sockfd, size, buffer);
+        printf("%lf\tMbps\n", throughput / 1024.0);
         
-        n = recv(sockfd, buff, 5, 0);
-        if (strcmp(buff, "done") == 0) {
-            gettimeofday(&tend, NULL);
-            secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
-            throughput = (double)BUFFERSIZE / (double)secDiff * (double)1000000 * 8.0;
-            //printf("%lf ms, throughput = %lf Mbps = %lf MB/s\n", (double)secDiff, throughput, throughput / 8.0 / 1024);
-            printf("%lf\tGbps\n", throughput / 1024.0 / 1024.0);
-        }
-        else {
-            fprintf(stderr, "[panic] what is server doing?\n");
-            exit(1);
-        }
+
     }
     close(sockfd);
 
     return 0;
+}
+
+
+double GetThroughput(int fd, int size, char* buffer)
+{
+    char buff[100];
+    int secDiff, n;
+    double throughput;
+    struct timeval t, tend;
+
+    memset(buff, 0, sizeof(buff));
+    gettimeofday(&t, NULL);
+    sizeSend(fd, buffer, BUFFERSIZE, 0, size);
+    
+    n = recv(fd, buff, 5, 0);
+    if (strcmp(buff, "done") == 0) {
+        gettimeofday(&tend, NULL);
+        secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+        throughput = ((double)BUFFERSIZE / (double)secDiff) * (double)1000000 * 8.0 / 1024;
+        //printf("%lf ms, throughput = %lf Mbps = %lf MB/s\n", (double)secDiff, throughput, throughput / 8.0 / 1024);
+        //printf("%lf\tGbps\n", throughput / 1024.0 / 1024.0);
+    }
+    else {
+        fprintf(stderr, "[panic] what is server doing?\n");
+        exit(1);
+    }
+    return throughput;
 }
 
 
