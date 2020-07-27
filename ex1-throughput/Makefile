@@ -1,13 +1,17 @@
 CC=gcc
 CFLAGS=-O4 -g
 
-all:client server
+COMMON=common.h client.h server.h
+all:clean client server
 
 hello.elf:hello.c
-	$(CC) $< $(CFLAGS) -o $@
+	$(CC) $< $(COMMON) $(CFLAGS) -o $@
 
 client: client.cpp
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) $< $(COMMON) -o $@
 
 server: server.cpp
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) $< $(COMMON) -o $@
+
+clean:
+	rm -rf ./client ./server

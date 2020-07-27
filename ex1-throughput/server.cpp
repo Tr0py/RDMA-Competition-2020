@@ -1,21 +1,17 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <netinet/tcp.h>
 
-#define MAXLINE 4096
+#include "server.h"
 
 int main(int argc, char **argv)
 {
     int listenfd, connfd; //listenfd as listen, accepted socket is connfd
     struct sockaddr_in servaddr; //0.0.0.0
     char* buff[4096];
+    char* buffer;
     int n;
+
+    /* Initialize send/receive buffer. */
+    InitializeBuffer(&buffer);
+    /* Initialize socket and listen at 0.0.0.0:6666 */
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(6666);
@@ -57,14 +53,21 @@ int main(int argc, char **argv)
         //}
     while (1) {
         printf("begin recv\n");
-        n = recv(connfd, buff, MAXLINE, 0);
-        if (n <= 0) {
+        n = autoRecv(connfd, buffer, BUFFERSIZE, 0);
+        if (n < 0) {
             fprintf(stderr, "socket broken.\n");
             perror("recv");
             return 0;
         }
-        buff[n] = '\0';
-        printf("received: %s\n", buff);
+        else if (n == BUFFERSIZE) {
+            printf("Received %lx Bytes.\n", BUFFERSIZE);
+            autoSend(connfd, "done", 5, 0);
+        }
+        else {
+            fprintf(stderr, "[panic] what is client doing?\n");
+            exit(1);
+        }
+
     }
     close(connfd);
     close(listenfd);
