@@ -26,17 +26,17 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    int flag = 1;
-    int result = setsockopt(sockfd,        /* socket affected */
-                            IPPROTO_TCP,   /* set option at TCP level */
-                            TCP_NODELAY,   /* name of option */
-                            (char *)&flag, /* the cast is historical cruft */
-                            sizeof(int));  /* length of option value */
-    if (result < 0)
-    {
-        perror("setsockopt");
-        return 1;
-    }
+    //int flag = 1;
+    //int result = setsockopt(sockfd,        /* socket affected */
+    //                        IPPROTO_TCP,   /* set option at TCP level */
+    //                        TCP_NODELAY,   /* name of option */
+    //                        (char *)&flag, /* the cast is historical cruft */
+    //                        sizeof(int));  /* length of option value */
+    //if (result < 0)
+    //{
+    //    perror("setsockopt");
+    //    return 1;
+    //}
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
@@ -56,14 +56,41 @@ int main(int argc, char **argv)
     InitializeBuffer(&buffer);
 
 
+    /* Warm-up round. */
+    throughput = GetThroughput(sockfd, 2048, buffer);
+    throughput = GetThroughput(sockfd, 2048, buffer);
 
+    /* Testing round. */
     for (int i=0; i <= 10; i++) {
         int size = 1 << i;
-        printf("%d\t", size);
+        int j;
+        double avr = 0, sum = 0, avrnew = 0;
 
+        /* Firstly we run 2 rounds to get an average. */
 
-        throughput = GetThroughput(sockfd, size, buffer);
-        printf("%lf\tMbps\n", throughput / 1024.0);
+        for (j=0; j < 2; j++) {
+            throughput = GetThroughput(sockfd, size, buffer);
+            sum += throughput;
+        }
+
+        avr = sum / (double)j;
+
+        /* Here we do extra rounds until variation < 1%. */
+        do {
+            //printf("[debug]\t%d\t%lf\tMbps\n", size, avr / 1024.0);
+            throughput = GetThroughput(sockfd, size, buffer);
+            sum += throughput;
+            avrnew = sum / ++j;
+            //printf("[debug-new]\t%d\t%lf\tMbps\n", size, avrnew / 1024.0);
+            if ( fabs(avrnew - avr) / avr < 0.01) {
+                //printf("avrnew %lf avr %lf\n, avrnew - avr %lf\n", avrnew, avr, fabs(avrnew-avr));
+                
+                break;
+            }
+            avr = avrnew;
+        } while (1);
+        avr = avrnew;
+        printf("%d\t%lf\tMbps\n", size, avr / 1024.0);
         
 
     }
@@ -90,7 +117,7 @@ double GetThroughput(int fd, int size, char* buffer)
         secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
         throughput = ((double)BUFFERSIZE / (double)secDiff) * (double)1000000 * 8.0 / 1024;
         //printf("%lf ms, throughput = %lf Mbps = %lf MB/s\n", (double)secDiff, throughput, throughput / 8.0 / 1024);
-        //printf("%lf\tGbps\n", throughput / 1024.0 / 1024.0);
+        //printf("%lf\tMbps\n", throughput / 1024.0 );
     }
     else {
         fprintf(stderr, "[panic] what is server doing?\n");

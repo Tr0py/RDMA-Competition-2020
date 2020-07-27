@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O4 -g
+CFLAGS=-O4 -g -lm
 
 COMMON=common.h client.h server.h
 all:clean client server

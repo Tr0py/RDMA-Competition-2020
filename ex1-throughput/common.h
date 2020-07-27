@@ -11,6 +11,7 @@
 #include <netinet/tcp.h>
 #include <sys/timeb.h>
 #include <sys/time.h>
+#include <math.h>
 
 #define MAXLINE 4096
 #define BUFFERSIZE 0x100000
