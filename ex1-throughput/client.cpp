@@ -56,24 +56,23 @@ int main(int argc, char **argv)
 
 
 
-    while (1) {
-        scanf("%s", buff);
+    for (int i=0; i <= 10; i++) {
+        int size = 1 << i;
+        printf("%d\t", size);
         memset(buff, 0, sizeof(buff));
         gettimeofday(&t, NULL);
-        //scanf("%s", buf);
-        //buf[strlen(buf)] = '\0';
-        autoSend(sockfd, buffer, BUFFERSIZE, 0);
-        //int res = recv(sockfd, recvbuf, 4, 0);
+        sizeSend(sockfd, buffer, BUFFERSIZE, 0, size);
 
 
-        printf("Sent.\n");
+        //printf("Sent.\n");
         
         n = recv(sockfd, buff, 5, 0);
         if (strcmp(buff, "done") == 0) {
             gettimeofday(&tend, NULL);
             secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
             throughput = (double)BUFFERSIZE / (double)secDiff * (double)1000000 * 8.0;
-            printf("%lf ms, throughput = %lf Mbps = %lf MB/s\n", (double)secDiff, throughput, throughput / 8.0 / 1024);
+            //printf("%lf ms, throughput = %lf Mbps = %lf MB/s\n", (double)secDiff, throughput, throughput / 8.0 / 1024);
+            printf("%lf\tGbps\n", throughput / 1024.0 / 1024.0);
         }
         else {
             fprintf(stderr, "[panic] what is server doing?\n");

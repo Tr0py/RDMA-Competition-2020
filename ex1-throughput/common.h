@@ -13,7 +13,7 @@
 #include <sys/time.h>
 
 #define MAXLINE 4096
-#define BUFFERSIZE 0x8000000
+#define BUFFERSIZE 0x80000
 
 int InitializeBuffer(char** pbuffer)
 {
@@ -27,6 +27,22 @@ int InitializeBuffer(char** pbuffer)
 }
 
 
+int sizeSend(int fd, char* buffer, int length, int flag, int size)
+{
+    int res, nleft = length;
+    char* ptr = buffer;
+    while (nleft > 0) {
+        res = send(fd, ptr, size, flag);
+        if (res < 0) {
+            perror("send");
+            exit(1);
+        }
+        nleft -= res;
+        ptr += res;
+        //fprintf(stderr, "[autoSend] Sent %d bytes, %d bytes left.\n", res, nleft);
+    }
+    return length;
+}
 int autoSend(int fd, char* buffer, int length, int flag)
 {
     int res, nleft = length;
@@ -39,7 +55,7 @@ int autoSend(int fd, char* buffer, int length, int flag)
         }
         nleft -= res;
         ptr += res;
-        fprintf(stderr, "[autoSend] Sent %d bytes, %d bytes left.\n", res, nleft);
+        //fprintf(stderr, "[autoSend] Sent %d bytes, %d bytes left.\n", res, nleft);
     }
     return length;
 }
@@ -48,9 +64,9 @@ int autoRecv(int fd, char* buffer, int length, int flag)
 {
     int res, nleft = length;
     char* ptr = buffer;
-        fprintf(stderr, "[autoRecv] Start receiving %d bytes.\n", length);
+        //fprintf(stderr, "[autoRecv] Start receiving %d bytes.\n", length);
     while (nleft > 0) {
-        fprintf(stderr, "[autoRecv] receiving %d bytes.\n", length);
+        //fprintf(stderr, "[autoRecv] receiving %d bytes.\n", length);
         res = recv(fd, ptr, nleft, flag);
         if (res < 0) {
             perror("recv");
@@ -62,7 +78,7 @@ int autoRecv(int fd, char* buffer, int length, int flag)
         }
         nleft -= res;
         ptr += res;
-        fprintf(stderr, "[autoRecv] Received %d bytes, %d bytes left.\n", res, nleft);
+        //fprintf(stderr, "[autoRecv] Received %d bytes, %d bytes left.\n", res, nleft);
     }
     return length;
 }
