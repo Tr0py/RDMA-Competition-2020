@@ -1,17 +1,18 @@
 # RDMA Competition Exercise #1 - Throughput
 
+**Key idea**: We measure the time of client transfering $N$ bytes of data to server, so the throughput between them is $N/(Time - Overhead)$. 
 
-Key idea: We measure the time of client transfering $N$ bytes of data to server, so the throughput between them is $N/Time$. 
 
+![algo](Algo.png)
 
-A little more detail: Every time we send $N$ bytes of data to server with different packet size, when server receives all of the data, it tells the client.  (Server replys "done" when it receives $N$ bytes of data.)
-Notice: This will introduce unintended overhead, buf we fixed that:) we'll measure the overhead first.
+**A little more detail**: Every time we send $N$ bytes of data to server with different packet size, when server receives all of the data, it tells the client.  (Server replys "done" when it receives $N$ bytes of data.)
+Notice: This will introduce unintended overhead, buf we fixed that: we'll measure the overhead first.
 
-** Features:  **
+**Features: **
 
-* We do warm-up rounds to get OS ready first.
-* We keep measuring the throughput until is stable (varaiation < 1%).
-* Since server sends an extra "done" message to client to indicate the ending of data transfer, it introduces overhead, which is exactly the half time of RTT. We takes it into consideration: we measures the RTT at first and minus the overhad when calculating throughput.
+* **WARM-UP:** We do **warm-up rounds** to get OS ready first.
+* **STABLE:** We keep measuring the **throughput until is stable** (varaiation < 1%).
+* **OVERHEAD**: Since server sends an extra "done" message to client to indicate the ending of data transfer, it introduces overhead, which is exactly the half time of RTT. We takes it into consideration: we measures the RTT at first and **minus the overhad** when calculating throughput.
 
 
 > Sizes/Byte: 1 2 4 8 16 32 64 128 256 512 1024 
