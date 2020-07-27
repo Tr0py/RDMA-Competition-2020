@@ -40,17 +40,17 @@ int main(int argc, char **argv)
         printf("accept socket error: %s(errno: %d)", strerror(errno), errno);
         exit(1);
     }
-        //int flag = 1;
-        //int result = setsockopt(connfd,        /* socket affected */
-        //                        IPPROTO_TCP,   /* set option at TCP level */
-        //                        TCP_NODELAY,   /* name of option */
-        //                        (char *)&flag, /* the cast is historical cruft */
-        //                        sizeof(int));  /* length of option value */
-        //if (result < 0)
-        //{
-        //    perror("setsockopt");
-        //    return 1;
-        //}
+
+    /* Help client know the RTT. */
+    int halo = 5;
+    printf("Helping client to measure RTT...\n");
+    while (halo--) {
+        n = autoRecv(connfd, buffer, 5, 0);
+        autoSend(connfd, "done", 5, 0);
+    }
+
+    /* Every time we receives BUFFERSIZE bytes of data we reply an "done"
+     * to let client know we got it.*/
     while (1) {
         printf("begin recv\n");
         n = autoRecv(connfd, buffer, BUFFERSIZE, 0);
@@ -60,8 +60,8 @@ int main(int argc, char **argv)
             return 0;
         }
         else if (n == BUFFERSIZE) {
-            printf("Received %lx Bytes.\n", BUFFERSIZE);
             autoSend(connfd, "done", 5, 0);
+            printf("Received %lx Bytes.\n", BUFFERSIZE);
         }
         else {
             fprintf(stderr, "[panic] what is client doing?\n");

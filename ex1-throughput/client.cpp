@@ -1,6 +1,8 @@
 #include "client.h"
 
+double rtt = 0;
 double GetThroughput(int fd, int size, char* buffer);
+
 int main(int argc, char **argv)
 {
     char recvline[4096], sendline[4096];
@@ -20,23 +22,12 @@ int main(int argc, char **argv)
     char* buffer;
     char buff[4096];
 
+    /* Initialize socket. */
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
         printf("create socket error: %s(errno: %d)\n", strerror(errno), errno);
         return 0;
     }
-
-    //int flag = 1;
-    //int result = setsockopt(sockfd,        /* socket affected */
-    //                        IPPROTO_TCP,   /* set option at TCP level */
-    //                        TCP_NODELAY,   /* name of option */
-    //                        (char *)&flag, /* the cast is historical cruft */
-    //                        sizeof(int));  /* length of option value */
-    //if (result < 0)
-    //{
-    //    perror("setsockopt");
-    //    return 1;
-    //}
 
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
@@ -55,10 +46,30 @@ int main(int argc, char **argv)
     /* Initialize send/receive buffer. */
     InitializeBuffer(&buffer);
 
+    /* Try to get the RTT */
+    int halo = 5;
+    int rttsum = 0;
+
+    while (halo--) {
+        gettimeofday(&t, NULL);
+        autoSend(sockfd, "done", 5, 0);
+        autoRecv(sockfd, buffer, 5, 0);
+        gettimeofday(&tend, NULL);
+        secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+        rttsum += secDiff;
+        //printf("[debug]\trtt = %dms\n", secDiff);
+    }
+    rtt = (double)rttsum / 5.0;
+    //printf("[debug]\trtt avr = %lf ms\n", rtt);
+
+
+
 
     /* Warm-up round. */
     throughput = GetThroughput(sockfd, 2048, buffer);
     throughput = GetThroughput(sockfd, 2048, buffer);
+
+    
 
     /* Testing round. */
     for (int i=0; i <= 10; i++) {
@@ -103,7 +114,8 @@ int main(int argc, char **argv)
 double GetThroughput(int fd, int size, char* buffer)
 {
     char buff[100];
-    int secDiff, n;
+    double secDiff;
+    int n;
     double throughput;
     struct timeval t, tend;
 
@@ -115,6 +127,9 @@ double GetThroughput(int fd, int size, char* buffer)
     if (strcmp(buff, "done") == 0) {
         gettimeofday(&tend, NULL);
         secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+        /* Here we minus the "done" overhead. */
+        secDiff -= rtt;
+        
         throughput = ((double)BUFFERSIZE / (double)secDiff) * (double)1000000 * 8.0 / 1024;
         //printf("%lf ms, throughput = %lf Mbps = %lf MB/s\n", (double)secDiff, throughput, throughput / 8.0 / 1024);
         //printf("%lf\tMbps\n", throughput / 1024.0 );
