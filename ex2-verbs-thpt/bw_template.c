@@ -50,6 +50,7 @@
 
 #define WC_BATCH (10)
 
+
 enum {
     PINGPONG_RECV_WRID = 1,
     PINGPONG_SEND_WRID = 2,
@@ -100,6 +101,7 @@ uint16_t pp_get_local_lid(struct ibv_context *context, int port)
 
     return attr.lid;
 }
+
 
 int pp_get_port_info(struct ibv_context *context, int port,
                      struct ibv_port_attr *attr)
@@ -234,19 +236,19 @@ static struct pingpong_dest *pp_client_exch_dest(const char *servername, int por
 
     gid_to_wire_gid(&my_dest->gid, gid);
     sprintf(msg, "%04x:%06x:%06x:%s", my_dest->lid, my_dest->qpn, my_dest->psn, gid);
-    fprintf(stderr, "[debug]\tmsg: %d, sizeof msg: %d\n", msg, sizeof msg);
+    //fprintf(stderr, "[debug]\tmsg: %d, sizeof msg: %d\n", msg, sizeof msg);
     if (write(sockfd, msg, sizeof msg) != sizeof msg) {
         fprintf(stderr, "Couldn't send local address\n");
         goto out;
     }
 
-    fprintf(stderr, "[debug]\tmsg: %d, sizeof msg: %d\n", msg, sizeof msg);
+    //fprintf(stderr, "[debug]\tmsg: %d, sizeof msg: %d\n", msg, sizeof msg);
     while ((debug_res = read(sockfd, msg, sizeof msg)) != sizeof msg) {
         perror("client read");
         fprintf(stderr, "Couldn't read remote address. read %d, sizeof msg %d.\n", debug_res, sizeof msg);
         goto out;
     }
-    fprintf(stderr, "[debug]\tmsg read done: %s\n", msg);
+    //fprintf(stderr, "[debug]\tmsg read done: %s\n", msg);
 
     write(sockfd, "done", sizeof "done");
 
@@ -328,7 +330,7 @@ static struct pingpong_dest *pp_server_exch_dest(struct pingpong_context *ctx,
         fprintf(stderr, "%d/%d: Couldn't read remote address\n", n, (int) sizeof msg);
         goto out;
     }
-    fprintf(stderr, "[server_xchg]\tread msg %s, sizeof msg %d\n", msg, sizeof msg);
+    //fprintf(stderr, "[server_xchg]\tread msg %s, sizeof msg %d\n", msg, sizeof msg);
 
     rem_dest = malloc(sizeof *rem_dest);
     if (!rem_dest)
@@ -347,14 +349,14 @@ static struct pingpong_dest *pp_server_exch_dest(struct pingpong_context *ctx,
 
     gid_to_wire_gid(&my_dest->gid, gid);
     sprintf(msg, "%04x:%06x:%06x:%s", my_dest->lid, my_dest->qpn, my_dest->psn, gid);
-    fprintf(stderr, "[server_xchg]\tsending msg %s, sizeof msg %d\n", msg, sizeof msg);
+    //fprintf(stderr, "[server_xchg]\tsending msg %s, sizeof msg %d\n", msg, sizeof msg);
     if (write(connfd, msg, sizeof msg) != sizeof msg) {
         fprintf(stderr, "Couldn't send local address\n");
         free(rem_dest);
         rem_dest = NULL;
         goto out;
     }
-    fprintf(stderr, "[server_xchg]\tsendt msg %s, sizeof msg %d\n", msg, sizeof msg);
+    //fprintf(stderr, "[server_xchg]\tsendt msg %s, sizeof msg %d\n", msg, sizeof msg);
 
     read(connfd, msg, sizeof msg);
 
@@ -409,6 +411,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
         return NULL;
     }
 
+    /* Note that this is a LOCAL_WRITE!! */
     ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE);
     if (!ctx->mr) {
         fprintf(stderr, "Couldn't register MR\n");
@@ -430,7 +433,9 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                         .max_send_wr  = tx_depth,
                         .max_recv_wr  = rx_depth,
                         .max_send_sge = 1,
-                        .max_recv_sge = 1
+                        .max_recv_sge = 1,
+                        /*TODO: What's the best value? */
+                        //.max_inline_data = 4096
                 },
                 .qp_type = IBV_QPT_RC
         };
@@ -527,11 +532,11 @@ static int pp_post_recv(struct pingpong_context *ctx, int n)
     return i;
 }
 
-static int pp_post_send(struct pingpong_context *ctx)
+static int pp_post_send(struct pingpong_context *ctx, int size)
 {
     struct ibv_sge list = {
             .addr   = (uint64_t)ctx->buf,
-            .length = ctx->size,
+            .length = size ? size : ctx->size,
             .lkey   = ctx->mr->lkey
     };
 
@@ -544,7 +549,12 @@ static int pp_post_send(struct pingpong_context *ctx)
             .next       = NULL
     };
 
-    return ibv_post_send(ctx->qp, &wr, &bad_wr);
+    if (ibv_post_send(ctx->qp, &wr, &bad_wr) < 0) {
+        perror("pp_post_sned::ibv_post_send");
+        exit(1);
+    }
+    fprintf(stderr, "pp_post_send::send %d bytes.\n", size?size:ctx->size);
+    return 0;
 }
 
 int pp_wait_completions(struct pingpong_context *ctx, int iters)
@@ -555,6 +565,8 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
         int ne, i;
 
         do {
+            //fprintf(stderr, "wait_completions::wating cq..\n");
+            /* This is busy waiting!!! */
             ne = ibv_poll_cq(ctx->cq, WC_BATCH, wc);
             if (ne < 0) {
                 fprintf(stderr, "poll CQ failed %d\n", ne);
@@ -574,9 +586,11 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
             switch ((int) wc[i].wr_id) {
             case PINGPONG_SEND_WRID:
                 ++scnt;
+                fprintf(stderr, "wait_completions::send complete. send size %d\n", wc[i].byte_len);
                 break;
 
             case PINGPONG_RECV_WRID:
+                /* Maintain rx_depth recv-outs */
                 if (--ctx->routs <= 10) {
                     ctx->routs += pp_post_recv(ctx, ctx->rx_depth - ctx->routs);
                     if (ctx->routs < ctx->rx_depth) {
@@ -587,6 +601,7 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
                     }
                 }
                 ++rcnt;
+                fprintf(stderr, "wait_completions::recv complete. recv size %d\n", wc[i].byte_len);
                 break;
 
             default:
@@ -618,6 +633,27 @@ static void usage(const char *argv0)
     printf("  -e, --events           sleep on CQ events (default poll)\n");
     printf("  -g, --gid-idx=<gid index> local port gid index\n");
 }
+double mGetRTT(struct pingpong_context *ctx, char* servername) 
+{
+    struct timeval           t, tend;
+    double                   secDiff;
+    fprintf(stderr, "Starting RTT Test..\n");
+    if (servername) {
+        gettimeofday(&t, NULL);
+        pp_post_send(ctx, 1);
+        pp_wait_completions(ctx, 2);
+        gettimeofday(&tend, NULL);
+        secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+        printf("RTT %lf ms\n", secDiff);
+    } else {
+        pp_wait_completions(ctx, 1);
+        pp_post_send(ctx, 1);
+        pp_wait_completions(ctx, 1);
+    }
+    fprintf(stderr, "RTT Test Complete..\n");
+    return secDiff;
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -639,6 +675,8 @@ int main(int argc, char *argv[])
     int                      sl = 0;
     int                      gidx = -1;
     char                     gid[33];
+    struct timeval           t, tend;
+    double                   secDiff;
 
     srand48(getpid() * time(NULL));
 
@@ -760,7 +798,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    fprintf(stderr, "pp_init_ctx...\n");
+    fprintf(stderr, "pp_init_ctx... size = %d, rx_depth %d, tx_depth %d.\n", size, rx_depth, tx_depth);
     ctx = pp_init_ctx(ib_dev, size, rx_depth, tx_depth, ib_port, use_event, !servername);
     if (!ctx)
         return 1;
@@ -822,30 +860,88 @@ int main(int argc, char *argv[])
         if (pp_connect_ctx(ctx, ib_port, my_dest.psn, mtu, sl, rem_dest, gidx))
             return 1;
 
+    /* Here we warm up. */
+    fprintf(stderr, "Warm up..\n");
     if (servername) {
+        pp_post_send(ctx, 0);
+        pp_wait_completions(ctx, 2);
+    } else {
+        pp_wait_completions(ctx, 1);
+        pp_post_send(ctx, 0);
+        pp_wait_completions(ctx, 1);
+    }
+
+
+    /* RTT Test. */
+    double RTTsum, RTTavr;
+    int i;
+    for ( i=0; i<5; i++) {
+        RTTsum += mGetRTT(ctx, servername);
+    }
+    RTTavr = RTTsum / (double) i;
+    printf("======RTT avr %lf ms======\n", RTTavr);
+
+
+    /* RTT Test. */
+    fprintf(stderr, "Starting RTT Test..\n");
+    if (servername) {
+        gettimeofday(&t, NULL);
+        pp_post_send(ctx, 1);
+        pp_wait_completions(ctx, 2);
+        gettimeofday(&tend, NULL);
+        secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+        printf("RTT %lf us\n", secDiff);
+    } else {
+        pp_wait_completions(ctx, 1);
+        pp_post_send(ctx, 1);
+        pp_wait_completions(ctx, 1);
+    }
+    fprintf(stderr, "RTT Test Complete..\n");
+        
+    /* RTT Test. */
+    fprintf(stderr, "Starting RTT Test..\n");
+    if (servername) {
+        gettimeofday(&t, NULL);
+        pp_post_send(ctx, 0);
+        pp_post_send(ctx, 0);
+        pp_wait_completions(ctx, 3);
+        gettimeofday(&tend, NULL);
+        secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+        double throughput = ctx->size / (secDiff - RTTavr) * 1000 * 8;
+        printf("size %d, RTT %lf us, throughput %lf Mbps\n", ctx->size, secDiff, throughput);
+    } else {
+        pp_wait_completions(ctx, 2);
+        pp_post_send(ctx, 1);
+        pp_wait_completions(ctx, 1);
+    }
+    fprintf(stderr, "RTT Test Complete..\n");
+#if 0
+    if (servername) {
+        /* Client Side. */
         int i;
         for (i = 0; i < iters; i++) {
             if ((i != 0) && (i % tx_depth == 0)) {
                 fprintf(stderr, "client pp_wait_completions...\n");
                 pp_wait_completions(ctx, tx_depth);
             }
-            if (pp_post_send(ctx)) {
+            if (pp_post_send(ctx, 0)) {
                 fprintf(stderr, "Client ouldn't post send\n");
                 return 1;
             }
         }
         printf("Client Done.\n");
     } else {
-        if (pp_post_send(ctx)) {
+        /* Server side. */
+        if (pp_post_send(ctx, 0)) {
             fprintf(stderr, "Server couldn't post send\n");
             return 1;
         }
         pp_wait_completions(ctx, iters);
         printf("Server Done.\n");
     }
+#endif
 
     ibv_free_device_list(dev_list);
     free(rem_dest);
     return 0;
 }
-
