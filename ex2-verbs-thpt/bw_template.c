@@ -163,6 +163,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
             IBV_QP_MAX_DEST_RD_ATOMIC |
             IBV_QP_MIN_RNR_TIMER)) {
         fprintf(stderr, "Failed to modify QP to RTR\n");
+        perror("ibv_modify_qp");
         return 1;
     }
 
@@ -200,6 +201,7 @@ static struct pingpong_dest *pp_client_exch_dest(const char *servername, int por
     int sockfd = -1;
     struct pingpong_dest *rem_dest = NULL;
     char gid[33];
+    int debug_res = 0;
 
     if (asprintf(&service, "%d", port) < 0)
         return NULL;
@@ -232,16 +234,19 @@ static struct pingpong_dest *pp_client_exch_dest(const char *servername, int por
 
     gid_to_wire_gid(&my_dest->gid, gid);
     sprintf(msg, "%04x:%06x:%06x:%s", my_dest->lid, my_dest->qpn, my_dest->psn, gid);
+    fprintf(stderr, "[debug]\tmsg: %d, sizeof msg: %d\n", msg, sizeof msg);
     if (write(sockfd, msg, sizeof msg) != sizeof msg) {
         fprintf(stderr, "Couldn't send local address\n");
         goto out;
     }
 
-    if (read(sockfd, msg, sizeof msg) != sizeof msg) {
+    fprintf(stderr, "[debug]\tmsg: %d, sizeof msg: %d\n", msg, sizeof msg);
+    while ((debug_res = read(sockfd, msg, sizeof msg)) != sizeof msg) {
         perror("client read");
-        fprintf(stderr, "Couldn't read remote address\n");
+        fprintf(stderr, "Couldn't read remote address. read %d, sizeof msg %d.\n", debug_res, sizeof msg);
         goto out;
     }
+    fprintf(stderr, "[debug]\tmsg read done: %s\n", msg);
 
     write(sockfd, "done", sizeof "done");
 
@@ -323,6 +328,7 @@ static struct pingpong_dest *pp_server_exch_dest(struct pingpong_context *ctx,
         fprintf(stderr, "%d/%d: Couldn't read remote address\n", n, (int) sizeof msg);
         goto out;
     }
+    fprintf(stderr, "[server_xchg]\tread msg %s, sizeof msg %d\n", msg, sizeof msg);
 
     rem_dest = malloc(sizeof *rem_dest);
     if (!rem_dest)
@@ -341,12 +347,14 @@ static struct pingpong_dest *pp_server_exch_dest(struct pingpong_context *ctx,
 
     gid_to_wire_gid(&my_dest->gid, gid);
     sprintf(msg, "%04x:%06x:%06x:%s", my_dest->lid, my_dest->qpn, my_dest->psn, gid);
+    fprintf(stderr, "[server_xchg]\tsending msg %s, sizeof msg %d\n", msg, sizeof msg);
     if (write(connfd, msg, sizeof msg) != sizeof msg) {
         fprintf(stderr, "Couldn't send local address\n");
         free(rem_dest);
         rem_dest = NULL;
         goto out;
     }
+    fprintf(stderr, "[server_xchg]\tsendt msg %s, sizeof msg %d\n", msg, sizeof msg);
 
     read(connfd, msg, sizeof msg);
 
@@ -752,10 +760,12 @@ int main(int argc, char *argv[])
         }
     }
 
+    fprintf(stderr, "pp_init_ctx...\n");
     ctx = pp_init_ctx(ib_dev, size, rx_depth, tx_depth, ib_port, use_event, !servername);
     if (!ctx)
         return 1;
 
+    fprintf(stderr, "pp_post_recv...\n");
     ctx->routs = pp_post_recv(ctx, ctx->rx_depth);
     if (ctx->routs < ctx->rx_depth) {
         fprintf(stderr, "Couldn't post receive (%d)\n", ctx->routs);
@@ -763,6 +773,7 @@ int main(int argc, char *argv[])
     }
 
     if (use_event)
+        fprintf(stderr, "ibv_req_notify_cq...\n");
         if (ibv_req_notify_cq(ctx->cq, 0)) {
             fprintf(stderr, "Couldn't request CQ notification\n");
             return 1;
@@ -815,6 +826,7 @@ int main(int argc, char *argv[])
         int i;
         for (i = 0; i < iters; i++) {
             if ((i != 0) && (i % tx_depth == 0)) {
+                fprintf(stderr, "client pp_wait_completions...\n");
                 pp_wait_completions(ctx, tx_depth);
             }
             if (pp_post_send(ctx)) {

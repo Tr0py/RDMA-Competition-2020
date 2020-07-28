@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall  -O2
+CFLAGS=-Wall  -g
 INCLUDES=
 LDFLAGS=-libverbs
 LIBS=-pthread -lrdmacm
@@ -10,7 +10,7 @@ PROG=verbs-demo
 
 all: $(PROG)
 
-debug: CFLAGS=-Wall -g -DDEBUG
+debug: CFLAGS=-Wall -g 
 debug: $(PROG)
 
 .c.o:
