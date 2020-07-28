@@ -415,6 +415,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
     ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE);
     if (!ctx->mr) {
         fprintf(stderr, "Couldn't register MR\n");
+        perror("ibv_reg_mr");
         return NULL;
     }
 
@@ -898,23 +899,25 @@ int main(int argc, char *argv[])
     }
     fprintf(stderr, "RTT Test Complete..\n");
         
-    /* RTT Test. */
-    fprintf(stderr, "Starting RTT Test..\n");
+    /* Throughput calculation. */
+    fprintf(stderr, "Starting Throughput calculation..\n");
+ //   int counter = 0x8000000 / size;
     if (servername) {
         gettimeofday(&t, NULL);
+//        for(int i = 0; i < counter; i++)
         pp_post_send(ctx, 0);
-        pp_post_send(ctx, 0);
-        pp_wait_completions(ctx, 3);
+        //pp_post_send(ctx, 0);
+        pp_wait_completions(ctx, 2);
         gettimeofday(&tend, NULL);
-        secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
-        double throughput = ctx->size / (secDiff - RTTavr) * 1000 * 8;
+        secDiff += (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+        double throughput = ctx->size / (secDiff - RTTavr) * 8;
         printf("size %d, RTT %lf us, throughput %lf Mbps\n", ctx->size, secDiff, throughput);
     } else {
-        pp_wait_completions(ctx, 2);
+        pp_wait_completions(ctx, 1);
         pp_post_send(ctx, 1);
         pp_wait_completions(ctx, 1);
     }
-    fprintf(stderr, "RTT Test Complete..\n");
+    fprintf(stderr, "Throughput calcalation Complete..\n");
 #if 0
     if (servername) {
         /* Client Side. */

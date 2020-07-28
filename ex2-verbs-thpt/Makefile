@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall  -g 
+CFLAGS=-Wall  -g  -std=gnu99
 INCLUDES=
 LDFLAGS=-libverbs
 LIBS=-pthread -lrdmacm
