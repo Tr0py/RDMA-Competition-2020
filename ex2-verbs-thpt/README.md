@@ -11,9 +11,22 @@ This is a test measuring infiband verbs send throughput with various package siz
 
 ## Results
 
-**The peak throughput is 81.920000 Gbps at 32768 bytes, while the best average throuput is 77.528725 Gbps at 1048576 bytes.**
+**The best peak throughput is 81.920000 Gbps at 32768 bytes.**
 
-Client log
+>  The best **average** throuput is 77.528725 Gbps at 1048576 bytes.
+
+#### Example run
+
+Server side
+
+```
+$ ./run.sh 
+```
+
+
+
+Client log (below are average throuputs)
+
 ```
 $ ./run.sh jupiter012
 pp_init_ctx... size = 1073741824, rx_depth 100, tx_depth 100.
