@@ -1,4 +1,4 @@
-# Communication demo
+# Lab #2: Verbs API Throughput
 
 ## Results
 
