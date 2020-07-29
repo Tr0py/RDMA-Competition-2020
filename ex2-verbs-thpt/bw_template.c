@@ -436,7 +436,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                         .max_send_sge = 1,
                         .max_recv_sge = 1,
                         /*TODO: What's the best value? */
-                        //.max_inline_data = 4096
+                        //.max_inline_data = 1 << 20
                 },
                 .qp_type = IBV_QPT_RC
         };
@@ -554,7 +554,7 @@ static int pp_post_send(struct pingpong_context *ctx, int size)
         perror("pp_post_sned::ibv_post_send");
         exit(1);
     }
-    fprintf(stderr, "pp_post_send::send %d bytes.\n", size?size:ctx->size);
+    //fprintf(stderr, "pp_post_send::send %d bytes.\n", size?size:ctx->size);
     return 0;
 }
 
@@ -587,7 +587,7 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
             switch ((int) wc[i].wr_id) {
             case PINGPONG_SEND_WRID:
                 ++scnt;
-                fprintf(stderr, "wait_completions::send complete. send size %d\n", wc[i].byte_len);
+                //fprintf(stderr, "wait_completions::send complete. send size %d\n", wc[i].byte_len);
                 break;
 
             case PINGPONG_RECV_WRID:
@@ -602,7 +602,7 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
                     }
                 }
                 ++rcnt;
-                fprintf(stderr, "wait_completions::recv complete. recv size %d\n", wc[i].byte_len);
+                //fprintf(stderr, "wait_completions::recv complete. recv size %d\n", wc[i].byte_len);
                 break;
 
             default:
@@ -634,24 +634,24 @@ static void usage(const char *argv0)
     printf("  -e, --events           sleep on CQ events (default poll)\n");
     printf("  -g, --gid-idx=<gid index> local port gid index\n");
 }
-double mGetRTT(struct pingpong_context *ctx, char* servername) 
+double mGetRTT(struct pingpong_context *ctx, char* servername, int msize) 
 {
     struct timeval           t, tend;
     double                   secDiff;
-    fprintf(stderr, "Starting RTT Test..\n");
+    //fprintf(stderr, "Starting RTT Test..\n");
     if (servername) {
         gettimeofday(&t, NULL);
-        pp_post_send(ctx, 1);
+        pp_post_send(ctx, msize);
         pp_wait_completions(ctx, 2);
         gettimeofday(&tend, NULL);
         secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
-        printf("RTT %lf ms\n", secDiff);
+        //printf("RTT %lf ms\n", secDiff);
     } else {
         pp_wait_completions(ctx, 1);
         pp_post_send(ctx, 1);
         pp_wait_completions(ctx, 1);
     }
-    fprintf(stderr, "RTT Test Complete..\n");
+    //fprintf(stderr, "RTT Test Complete..\n");
     return secDiff;
 }
 
@@ -799,7 +799,9 @@ int main(int argc, char *argv[])
         }
     }
 
+    size = 1 << 30;
     fprintf(stderr, "pp_init_ctx... size = %d, rx_depth %d, tx_depth %d.\n", size, rx_depth, tx_depth);
+    
     ctx = pp_init_ctx(ib_dev, size, rx_depth, tx_depth, ib_port, use_event, !servername);
     if (!ctx)
         return 1;
@@ -877,46 +879,72 @@ int main(int argc, char *argv[])
     double RTTsum, RTTavr;
     int i;
     for ( i=0; i<5; i++) {
-        RTTsum += mGetRTT(ctx, servername);
+        RTTsum += mGetRTT(ctx, servername, 1);
     }
     RTTavr = RTTsum / (double) i;
-    printf("======RTT avr %lf ms======\n", RTTavr);
+    printf("======RTT avr %lf us======\n", RTTavr);
 
 
-    /* RTT Test. */
-    fprintf(stderr, "Starting RTT Test..\n");
-    if (servername) {
-        gettimeofday(&t, NULL);
-        pp_post_send(ctx, 1);
-        pp_wait_completions(ctx, 2);
-        gettimeofday(&tend, NULL);
-        secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
-        printf("RTT %lf us\n", secDiff);
-    } else {
-        pp_wait_completions(ctx, 1);
-        pp_post_send(ctx, 1);
-        pp_wait_completions(ctx, 1);
-    }
-    fprintf(stderr, "RTT Test Complete..\n");
+    ///* RTT Test. */
+    //fprintf(stderr, "Starting RTT Test..\n");
+    //if (servername) {
+    //    gettimeofday(&t, NULL);
+    //    pp_post_send(ctx, 1);
+    //    pp_wait_completions(ctx, 2);
+    //    gettimeofday(&tend, NULL);
+    //    secDiff = (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
+    //    printf("RTT %lf us\n", secDiff);
+    //} else {
+    //    pp_wait_completions(ctx, 1);
+    //    pp_post_send(ctx, 1);
+    //    pp_wait_completions(ctx, 1);
+    //}
+    //fprintf(stderr, "RTT Test Complete..\n");
         
     /* Throughput calculation. */
     fprintf(stderr, "Starting Throughput calculation..\n");
- //   int counter = 0x8000000 / size;
-    if (servername) {
-        gettimeofday(&t, NULL);
-//        for(int i = 0; i < counter; i++)
-        pp_post_send(ctx, 0);
-        //pp_post_send(ctx, 0);
-        pp_wait_completions(ctx, 2);
-        gettimeofday(&tend, NULL);
-        secDiff += (tend.tv_sec - t.tv_sec) * 1000000 + tend.tv_usec - t.tv_usec;
-        double throughput = ctx->size / (secDiff - RTTavr) * 8;
-        printf("size %d, RTT %lf us, throughput %lf Mbps\n", ctx->size, secDiff, throughput);
-    } else {
-        pp_wait_completions(ctx, 1);
-        pp_post_send(ctx, 1);
-        pp_wait_completions(ctx, 1);
+    printf("size\tthroughput\tunit\n");
+    double bestThrpt = 0, bestavrThrpt = 0;
+    int bestSize = 0, bestavrSize = 0;
+    /* Warm up before throuput test. */
+    for (i=0; i<4; i++) {
+        mGetRTT(ctx, servername, 4096);
     }
+
+    int j, msize;
+    double Tsum = 0, Tavr = 0, Thrpt = 0, ret = 0;
+    for (i=12; i<30; i++) {
+        msize = 1 << i;
+        Tsum = 0, Tavr = 0, Thrpt = 0, ret = 0;
+        for (j=0; j<4; j++) {
+            ret = mGetRTT(ctx, servername, msize);
+            if (i > 13)
+            {
+                Thrpt = msize / (ret - RTTavr) * 8 / 1000;
+                if (Thrpt > bestThrpt) {
+                    bestSize = msize;
+                    bestThrpt = Thrpt;
+                }
+            }
+            Tsum += ret;
+        }
+        if (i > 12) /* First round as warmup */
+        if (servername) {
+            Tavr = Tsum / (double)j;
+            Thrpt = msize / (Tavr - RTTavr) * 8 / 1000;
+            if (Thrpt > bestavrThrpt) {
+                bestavrSize = msize;
+                bestavrThrpt = Thrpt;
+            }
+            printf("%d\t%lf\tGbps\n", msize, Thrpt);
+        }
+    }
+    printf("Best peak throuput %lf Gbps at %d bytes.\n", bestThrpt, bestSize);
+    printf("Best average throuput %lf Gbps at %d bytes.\n", bestavrThrpt, bestavrSize);
+
+
+        
+        
     fprintf(stderr, "Throughput calcalation Complete..\n");
 #if 0
     if (servername) {
