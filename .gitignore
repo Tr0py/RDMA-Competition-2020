@@ -4,3 +4,5 @@ client
 server
 .*
 tags
+*.o
+verbs-demo
