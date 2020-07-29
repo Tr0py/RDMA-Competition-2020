@@ -1,5 +1,14 @@
 # Lab #2: Verbs API Throughput
 
+## Brief Description
+
+This is a test measuring infiband verbs send throughput with various package size.
+
+* **MAX\_INLINE** is not very useful here since the max inline size is 512 bytes, which is limited by the infiniband library. Packages smaller than 512 bytes won't effectively ultilize the bandiwidth.
+* **WARM-UP** We do warm up round to get OS ready.
+* **OVERHEAD** We minus the overhead of propagation time and server responding time to get a more accurate transmission time.
+* **Best Record** We keep a recored of the best record of (1)highest peak throughput and (2)highest average throughput.
+
 ## Results
 
 **The peak throughput is 81.920000 Gbps at 32768 bytes, while the best average throuput is 77.528725 Gbps at 1048576 bytes.**

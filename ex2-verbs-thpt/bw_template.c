@@ -436,7 +436,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                         .max_send_sge = 1,
                         .max_recv_sge = 1,
                         /*TODO: What's the best value? */
-                        //.max_inline_data = 1 << 20
+                        .max_inline_data = 64
                 },
                 .qp_type = IBV_QPT_RC
         };
