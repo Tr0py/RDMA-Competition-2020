@@ -1,6 +1,6 @@
 # RDMA Competition 
 
-#### Exercise #1 - Throughput : `ex1-throughput` folder
+#### Exercise #1 - TCP Socket Throughput : `ex1-throughput` folder
 
 #### Exercise #2 - Infiband Verbs Throughput : `ex2-verbs-thpt` folder
 

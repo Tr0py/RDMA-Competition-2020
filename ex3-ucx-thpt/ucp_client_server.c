@@ -33,6 +33,7 @@
 #include <arpa/inet.h> /* inet_addr */
 #include <unistd.h>    /* getopt */
 #include <stdlib.h>    /* atoi */
+#include <sys/time.h>
 
 #define TEST_STRING_LEN        sizeof(test_message)
 #define DEFAULT_PORT           13337
@@ -43,7 +44,7 @@
 #define PRINT_INTERVAL         2000
 #define DEFAULT_NUM_ITERATIONS 1
 
-const  char test_message[]           = "UCX Client-Server Hello World";
+char test_message[0x80000]           = "UCX Client-Server Hello World";
 static uint16_t server_port          = DEFAULT_PORT;
 static int num_iterations            = DEFAULT_NUM_ITERATIONS;
 
@@ -296,6 +297,7 @@ static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
 
     if (!is_server) {
         /* Client sends a message to the server using the Tag-Matching API */
+        //the parameter 1 is the size
         request = ucp_tag_send_nb(ep, test_message, 1,
                                   ucp_dt_make_contig(TEST_STRING_LEN), TAG,
                                   send_cb);
@@ -306,8 +308,9 @@ static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                                   TAG, 0, tag_recv_cb);
     }
 
-    return request_finalize(ucp_worker, request, is_server, recv_message,
+    int ret = request_finalize(ucp_worker, request, is_server, recv_message,
                             current_iter);
+    return ret;
 }
 
 /**
@@ -611,6 +614,19 @@ static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
                                  send_recv_type_t send_recv_type, int is_server)
 {
     int i, ret = 0;
+    struct timeval tbegin, tend;
+    
+    //warm up
+    for (i = 0; i < 10; i++) {
+        ret = client_server_communication(ucp_worker, ep, send_recv_type,
+                is_server, i);
+        if (ret != 0) {
+            fprintf(stderr, "%s failed on iteration #%d\n",
+                    (is_server ? "server": "client"), i);
+            goto out;
+        }
+    }
+    gettimeofday(&tbegin, NULL);
 
     for (i = 0; i < num_iterations; i++) {
         ret = client_server_communication(ucp_worker, ep, send_recv_type,
@@ -620,6 +636,16 @@ static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
                     (is_server ? "server": "client"), i);
             goto out;
         }
+    }
+    client_server_communication(ucp_worker, ep, send_recv_type, is_server, i);
+
+    gettimeofday(&tend, NULL);
+    double secDiff = (tend.tv_sec - tbegin.tv_sec) * 1000000 + tend.tv_usec - tbegin.tv_usec;
+    double throughput = TEST_STRING_LEN * num_iterations / secDiff * 8 / 1000;
+    if(!is_server){
+        printf("time cost is %lfus\n", secDiff);
+        printf("size\tthroughput\tuinit\n");
+        printf("%ld\t%lf\tGbps\n", TEST_STRING_LEN, throughput);
     }
 
 out:
