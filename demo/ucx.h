@@ -649,19 +649,8 @@ static int client_server_communication(ucp_worker_h worker, ucp_ep_h ep,
 {
     int ret;
 
-    switch (send_recv_type) {
-    case CLIENT_SERVER_SEND_RECV_STREAM:
-        /* Client-Server communication via Stream API */
-        ret = send_recv_stream(worker, ep, is_server, iterations);
-        break;
-    case CLIENT_SERVER_SEND_RECV_TAG:
-        /* Client-Server communication via Tag-Matching API */
-        ret = send_recv_tag(worker, ep, is_server, iterations);
-        break;
-    default:
-        fprintf(stderr, "unknown send-recv type %d\n", send_recv_type);
-        return -1;
-    }
+    /* Client-Server communication via Stream API */
+    ret = send_recv_stream(worker, ep, is_server, iterations);
 
     return ret;
 }
@@ -804,6 +793,53 @@ out:
     return ret;
 }
 
+
+static inline int ucp_listen(ucp_context_h ucp_context, ucp_worker_h ucp_worker, char *listen_addr, ucp_worker_h* ucp_data_worker, ucx_server_ctx_t *context, ucp_ep_h *server_ep)
+{
+    ucs_status_t     status;
+    int              ret;
+
+    /* Create a data worker (to be used for data exchange between the server
+     * and the client after the connection between them was established) */
+    ret = init_worker(ucp_context, ucp_data_worker);
+    if (ret != 0) {
+        return ret; 
+    }
+
+    /* Initialize the server's context. */
+    context->conn_request = NULL;
+
+    /* Create a listener on the worker created at first. The 'connection
+     * worker' - used for connection establishment between client and server.
+     * This listener will stay open for listening to incoming connection
+     * requests from the client */
+    status = start_server(ucp_worker, context, &context->listener, listen_addr);
+    if (status != UCS_OK) {
+        ret = -1;
+    } 
+    return ret; 
+}
+
+static inline int ucp_accept(ucp_worker_h ucp_data_worker, ucp_worker_h ucp_worker, ucp_ep_h *server_ep, ucx_server_ctx_t *context)
+{
+    int ret, status;
+    while (context->conn_request == NULL) {
+        ucp_worker_progress(ucp_worker);
+    }
+
+    /* Server creates an ep to the client on the data worker.
+    * This is not the worker the listener was created on.
+    * The client side should have initiated the connection, leading
+    * to this ep's creation */
+    status = server_create_ep(ucp_data_worker, context->conn_request,
+                            server_ep);
+    if (status != UCS_OK) {
+        ret = -1;
+    }
+
+    return ret;
+}
+
 static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
                       char *listen_addr, send_recv_type_t send_recv_type)
 {
@@ -861,7 +897,8 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         if (ret != 0) {
             goto err_ep;
         }
-    }          
+    }           
+
     ep_close(ucp_data_worker, server_ep);
 
     /* Reinitialize the server's context to be used for the next client */
@@ -878,13 +915,27 @@ err:
     return ret;
 }
 
+static inline int ucp_connect(ucp_worker_h ucp_worker, char *server_addr, ucp_ep_h *client_ep)
+{
+    ucs_status_t status;
+    int          ret;
+
+    printf("server addr %s\n", server_addr);
+    status = start_client(ucp_worker, server_addr, client_ep);
+    if (status != UCS_OK) {
+        fprintf(stderr, "failed to start client (%s)\n", ucs_status_string(status));
+        ret = -1;
+    }
+    return ret;
+}
+
 static int run_client(ucp_worker_h ucp_worker, char *server_addr,
-                      send_recv_type_t send_recv_type)
+        send_recv_type_t send_recv_type)
 {
     ucp_ep_h     client_ep;
     ucs_status_t status;
     int          ret;
-    
+
     printf("server addr %s\n", server_addr);
     status = start_client(ucp_worker, server_addr, &client_ep);
     if (status != UCS_OK) {
@@ -894,14 +945,14 @@ static int run_client(ucp_worker_h ucp_worker, char *server_addr,
     }
 
     ret = 0;
-    EVERY_SEND_LEN = 0;
+    /*EVERY_SEND_LEN = 0;
 
-    printf("ALL SIZE: %d\n", TEST_BUFFER_LEN);
-    for (EVERY_SEND_LEN = 1 << EVERY_SEND_LEN_BEGIN; EVERY_SEND_LEN <= 1 << EVERY_SEND_LEN_END; EVERY_SEND_LEN <<= 1){
-        printf("%d ", EVERY_SEND_LEN);
-        ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0, num_iterations);
-        printf("\n");
-    }
+      printf("ALL SIZE: %d\n", TEST_BUFFER_LEN);
+      for (EVERY_SEND_LEN = 1 << EVERY_SEND_LEN_BEGIN; EVERY_SEND_LEN <= 1 << EVERY_SEND_LEN_END; EVERY_SEND_LEN <<= 1){
+      printf("%d ", EVERY_SEND_LEN);
+      ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0, num_iterations);
+      printf("\n");
+      }*/
 
     /* Close the endpoint to the server */
     ep_close(ucp_worker, client_ep);
@@ -924,8 +975,8 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker)
 
     /* UCP initialization */
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES     |
-                              UCP_PARAM_FIELD_REQUEST_SIZE |
-                              UCP_PARAM_FIELD_REQUEST_INIT;
+        UCP_PARAM_FIELD_REQUEST_SIZE |
+        UCP_PARAM_FIELD_REQUEST_INIT;
     ucp_params.features     = UCP_FEATURE_STREAM | UCP_FEATURE_TAG;
     ucp_params.request_size = sizeof(test_req_t);
     ucp_params.request_init = request_init;
@@ -951,43 +1002,3 @@ err:
 }
 
 
-int main(int argc, char **argv)
-{
-    send_recv_type_t send_recv_type = CLIENT_SERVER_SEND_RECV_DEFAULT;
-    char *server_addr = NULL;
-    char *listen_addr = NULL;
-    int ret;
-    srand(time(NULL));
-
-    /* UCP objects */
-    ucp_context_h ucp_context;
-    ucp_worker_h  ucp_worker;
-
-    ret = parse_cmd(argc, argv, &server_addr, &listen_addr, &send_recv_type);
-    if (ret != 0) {
-        goto err;
-    }
-
-    init_buffer();
-
-    /* Initialize the UCX required objects */
-    ret = init_context(&ucp_context, &ucp_worker);
-    if (ret != 0) {
-        goto err;
-    }
-
-    /* Client-Server initialization */
-    if (server_addr == NULL) {
-        /* Server side */
-        ret = run_server(ucp_context, ucp_worker, listen_addr, send_recv_type);
-    } else {
-        /* Client side */
-        ret = run_client(ucp_worker, server_addr, send_recv_type);
-    }
-
-    ucp_worker_destroy(ucp_worker);
-    ucp_cleanup(ucp_context);
-    free_buffer();
-err:
-    return ret;
-}

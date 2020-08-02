@@ -1,5 +1,5 @@
 all:
-	gcc ucp_client_server.c -lucp -lucs -o ucp_client_server -luct -lucs -I/global/home/users/ziyi/ucx-source/install/include -L/global/home/users/ziyi/ucx-source/install/lib -Wall -Wl,-rpath,/global/home/users/ziyi/ucx-source/install/lib  
+	gcc ucp_client_server.c -lucp -lucs -I/global/home/users/ziyi/ucx-source/install/include -L/global/home/users/ziyi/ucx-source/install/lib -Wl,-rpath,/global/home/users/ziyi/ucx-source/install/lib -o ucp_client_server 
 
 clean:
 	rm -f ucp_client_server
